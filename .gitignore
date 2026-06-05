@@ -1,0 +1,6 @@
+*.FCBak
+*.Session-*.FCStd
+__pycache__/
+gcode/
+.DS_Store
+*.old.*
