@@ -4,3 +4,4 @@ __pycache__/
 gcode/
 .DS_Store
 *.old.*
+archive/
