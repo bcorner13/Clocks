@@ -1,9 +1,37 @@
 # WARNINGS — Clocks parametric debt & known issues
 
-Captured during the retroactive bootstrap (2026-06-04). These are recorded, not yet fixed.
-Baseline audit: `scripts/audit_parametric.py` → **84 issues across 5 files** (the duplicate
-`ClockFace.FCStd`, deleted during bootstrap, accounted for 8). Re-run the audit after each
-remediation phase.
+Captured during the retroactive bootstrap (2026-06-04).
+
+## STATUS after Params migration (2026-06-04)
+
+**Params migration is complete.** Every literal dimensional constraint across the four
+FCStds is now bound to `<<Params>>#VarSet.<Var>` in the central `Params.FCStd` (21 params).
+Geometry verified unchanged (bbox + volume identical pre/post) and the central Params proven
+to drive geometry (FaceDiameter round-trip test). The bracket's pre-existing **local** VarSet
+(`InsideDistance`) was migrated into central Params and the dead local VarSet deleted.
+
+**Corrected audit now reports only 4 issues — all expected:** the feature-face DAG-risk
+attachments in `ClockFace-blank` (1) and `ClockFace-lines` (3), which **Phase 3 (reorient)**
+resolves. Bracket, number, and Params are clean.
+
+> ⚠️ **Canonical `audit_parametric.py` bug (affects ALL projects).** The copied-from-Spade
+> audit shipped a WRONG Sketcher constraint-type table — it labeled Tangent(5) as
+> "ParallelDistance", Perpendicular(10) as "Angle", Block(17) as "Diameter", and missed real
+> Radius(11)/Diameter(18). Result: it reported geometric constraints as unbound dimensions
+> (the original "84 baseline" was heavily inflated with false positives). The **Clocks copy is
+> fixed** (correct enum, verified 1:1 against the live Sketcher API, plus Type-aware feature
+> dims and a 90°-angle exemption). The canonical copy and other projects' copies are still
+> buggy — propagate the fix.
+
+The historical baseline below is retained for reference; the per-file literal counts in it
+were partly false positives from the audit bug. The DAG-risk findings in it are real.
+
+---
+
+## Historical baseline (pre-migration, pre-audit-fix — partly inflated)
+
+Baseline audit (buggy script): **84 issues across 5 files** (the duplicate `ClockFace.FCStd`,
+deleted during bootstrap, accounted for 8).
 
 ## Remediation order (per specs)
 

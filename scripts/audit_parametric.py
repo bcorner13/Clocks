@@ -22,18 +22,41 @@ import zipfile
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-# Constraint Types that are "dimensional" (i.e. driven by a numeric value).
-# Indices from FreeCAD Sketcher source — these need expression bindings.
+# Constraint Types that are "dimensional" (i.e. driven by a numeric value) and
+# therefore need expression bindings.
+#
+# CORRECTED 2026-06-04 for the Clocks project: the canonical copy of this script
+# carried a WRONG enum mapping (it labeled 5=ParallelDistance, 9=Radius, 10=Angle,
+# 17=Diameter, 18=Weight). That misclassified geometric constraints — Tangent(5),
+# Perpendicular(10), Block(17) — as unbound dimensions (false positives) and missed
+# real Radius(11)/Diameter(18). Verified empirically against the live Sketcher API
+# (XML Type integers align 1:1 with o.Constraints[i].Type). The values below match
+# FreeCAD's Sketcher Constraint.h enum:
+#   0 None 1 Coincident 2 Horizontal 3 Vertical 4 Parallel 5 Tangent 6 Distance
+#   7 DistanceX 8 DistanceY 9 Angle 10 Perpendicular 11 Radius 12 Equal
+#   13 PointOnObject 14 Symmetric 15 InternalAlignment 16 SnellsLaw 17 Block
+#   18 Diameter 19 Weight
+# Weight(19) is a B-spline control-point weight — NOT a user dimension — and is
+# intentionally excluded (documented exemption).
 DIMENSIONAL_TYPES = {
-    5: "ParallelDistance",
-    6: "DistanceY",
+    6: "Distance",
     7: "DistanceX",
-    8: "Distance (length)",
-    9: "Radius",
-    10: "Angle",
-    17: "Diameter",
-    18: "Weight",
+    8: "DistanceY",
+    9: "Angle",
+    11: "Radius",
+    18: "Diameter",
 }
+
+# Angle constraints at exactly 90 degrees are perpendicularity expressed as an angle;
+# they are geometric, not design dimensions. Exempt (matches the Weight exemption).
+RIGHT_ANGLE_RAD = 1.5707963267948966
+
+# PartDesign Pad/Pocket Type enum: 0 Length, 1 TwoLengths, 2 UpToLast, 3 UpToFirst,
+# 4 UpToFace, 5 ThroughAll. Length is only active for Length/TwoLengths; Length2 only
+# for TwoLengths. Anything else makes those numeric props inert (binding them would be
+# noise), so the audit must not flag inactive feature dims.
+LENGTH_ACTIVE_TYPES = {0, 1}
+LENGTH2_ACTIVE_TYPES = {1}
 
 
 def extract_xml(fcstd_path):
@@ -74,12 +97,20 @@ def audit_sketch(xml, name):
 
     # For dimensional constraints, check that they're bound by expression
     if cl:
-        # Index of each dimensional constraint
+        # Index of each dimensional constraint. Enumerate EVERY <Constrain> element so
+        # the enumeration index matches the live o.Constraints[i] index 1:1.
         dim_indices = []
-        for idx, c in enumerate(re.finditer(r'<Constrain [^/]*Type="(\d+)"[^/]*/>', cl.group(2))):
-            t = int(c.group(1))
-            if t in DIMENSIONAL_TYPES:
-                dim_indices.append((idx, DIMENSIONAL_TYPES[t]))
+        for idx, c in enumerate(re.finditer(r'<Constrain\b([^>]*?)/>', cl.group(2))):
+            attrs = c.group(1)
+            tm = re.search(r'\bType="(\d+)"', attrs)
+            t = int(tm.group(1)) if tm else -1
+            if t not in DIMENSIONAL_TYPES:
+                continue
+            if t == 9:  # Angle — exempt exact 90deg (perpendicularity)
+                vm = re.search(r'\bValue="([-\d.eE]+)"', attrs)
+                if vm and abs(abs(float(vm.group(1))) - RIGHT_ANGLE_RAD) < 1e-3:
+                    continue
+            dim_indices.append((idx, DIMENSIONAL_TYPES[t]))
 
         # Which indices have expression bindings?
         bound_indices = set()
@@ -103,10 +134,14 @@ def audit_sketch(xml, name):
 
 
 def audit_feature_dimensions(xml):
-    """Check Pad/Pocket/Chamfer/Fillet etc. numeric properties for expression bindings."""
+    """Check Pad/Pocket/Chamfer/Fillet etc. numeric properties for expression bindings.
+
+    Type-aware: a Pad/Pocket's Length is inert unless Type is Length/TwoLengths, and
+    Length2 is inert unless Type is TwoLengths. Inert dims are skipped — flagging them
+    would demand a meaningless Param (see LENGTH_ACTIVE_TYPES)."""
     issues = []
-    # Objects of interest
     for type_name in ["PartDesign::Pad", "PartDesign::Pocket", "PartDesign::Chamfer", "PartDesign::Fillet"]:
+        is_pad_pocket = type_name in ("PartDesign::Pad", "PartDesign::Pocket")
         for name in re.findall(rf'<Object type="{type_name}" name="(\w+)"', xml):
             body = get_object(xml, name)
             if body is None:
@@ -117,8 +152,17 @@ def audit_feature_dimensions(xml):
                 for m in re.finditer(r'<Expression path="([^"]+)"', ee.group(2)):
                     bound_paths.add(m.group(1))
 
-            # Check each numeric property
+            # Determine which length props are active for this feature.
+            ptype = None
+            if is_pad_pocket:
+                tm = re.search(r'<Property name="Type"[^>]*>\s*<Integer value="(\d+)"', body)
+                ptype = int(tm.group(1)) if tm else 0
+
             for prop in ["Length", "Length2", "Radius", "Offset", "Size"]:
+                if is_pad_pocket and prop == "Length" and ptype not in LENGTH_ACTIVE_TYPES:
+                    continue
+                if is_pad_pocket and prop == "Length2" and ptype not in LENGTH2_ACTIVE_TYPES:
+                    continue
                 p = re.search(rf'<Property name="{prop}"[^>]*>\s*<Float value="([-\d.]+)"', body)
                 if p and abs(float(p.group(1))) > 1e-9:
                     if prop not in bound_paths:

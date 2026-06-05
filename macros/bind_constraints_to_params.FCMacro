@@ -1,0 +1,107 @@
+# bind_constraints_to_params.FCMacro
+# Binds sketch constraints + active feature dims to <<Params>>#VarSet.<Param>.
+# Idempotent: re-running re-asserts the same expressions.
+# Safety: each binding declares the EXPECTED current value; if the live constraint
+# value doesn't match (index drift), that binding is SKIPPED and reported — never
+# blindly bound to the wrong dimension.
+#
+# Also migrates ClockBracket's pre-existing LOCAL VarSet (InsideDistance) into the
+# central Params and deletes the now-dead local VarSet object.
+#
+# Exempt (left as literals, by decision): B-spline Weight constraints; the two 90deg
+# Angle constraints in ClockFace-lines Sketch004 (geometric perpendicularity).
+#
+# Run with Params + the four FCStds open. Saves nothing.
+import FreeCAD as App
+import math
+
+P = "<<Params>>#VarSet."   # canonical cross-doc prefix
+
+# Face base profile + center bore — identical across the three face docs.
+FACE_BASE = [
+    ("Sketch",    15, 60.0,  P + "FaceDiameter / 2"),
+    ("Sketch",    16,  3.0,  P + "FaceThickness"),
+    ("Sketch",    13,  1.5,  P + "FacePlateThickness"),
+    ("Sketch",    14,  1.5,  P + "BezelWidth"),
+    ("Sketch001",  0,  8.0,  P + "MovementBoreDiameter"),
+]
+
+MAPPING = {
+    "ClockFace_blank": {"constraints": list(FACE_BASE), "features": [], "drop_varset": False},
+    "ClockFace":       {"constraints": list(FACE_BASE), "features": [], "drop_varset": False},  # number
+    "ClockFace_lines": {
+        "constraints": list(FACE_BASE) + [
+            ("Sketch002", 7,  1.0,  P + "HourMarkWidth"),
+            ("Sketch002", 8, 10.0,  P + "HourMarkLength"),
+            ("Sketch004", 4,  1.0,  P + "HalfHourMarkWidth"),
+            ("Sketch004", 5,  5.0,  P + "HalfHourMarkLength"),
+            ("Sketch004", 6,  math.radians(15.0), P + "HalfHourMarkAngle"),  # angle: API value in radians
+        ],
+        "features": [
+            ("Pad",          "Length",      1.0, P + "HourMarkRelief"),
+            ("Pad001",       "Length",      0.5, P + "HalfHourMarkRelief"),
+            ("PolarPattern", "Occurrences", 12,  P + "MarkCount"),
+            ("PolarPattern001","Occurrences",12, P + "MarkCount"),
+        ],
+        "drop_varset": False,
+    },
+    "ClockBracket": {
+        "constraints": [
+            ("Sketch",    27, 41.0, P + "BracketSideLength"),
+            ("Sketch",    39, 41.0, P + "BracketSideLength"),
+            ("Sketch",    40, 41.0, P + "BracketSideLength"),
+            ("Sketch",     5, 58.0, P + "BracketMountHolePitch"),
+            ("Sketch",     6, 58.0, P + "BracketMountHolePitch"),
+            ("Sketch",    43,  5.0, P + "BracketWallThickness"),
+            ("Sketch001", 17, 40.0, P + "BracketInnerSideLength"),
+            ("Sketch001",  8,  6.0, P + "BracketInnerInset"),   # rewrite from local VarSet
+            ("Sketch001", 16,  6.0, P + "BracketInnerInset"),   # rewrite from local VarSet
+            ("Sketch002",  0,  8.0, P + "BracketCenterHoleDiameter"),
+        ],
+        "features": [
+            ("Pad",    "Length", 22.0, P + "BracketPadHeight"),
+            ("Pad001", "Length",  2.0, P + "BracketLipHeight"),
+        ],
+        "drop_varset": True,   # delete local VarSet after rebinding its references
+    },
+}
+
+TOL = 0.02
+
+
+def run():
+    skipped, bound = [], 0
+    for dn, spec in MAPPING.items():
+        doc = App.getDocument(dn)
+        if doc is None:
+            skipped.append((dn, "*", "doc not open")); continue
+        for sk, idx, exp, expr in spec["constraints"]:
+            o = doc.getObject(sk)
+            if o is None or idx >= len(o.Constraints):
+                skipped.append((dn, f"{sk}[{idx}]", "missing")); continue
+            cur = float(o.Constraints[idx].Value)
+            if abs(cur - exp) > TOL:
+                skipped.append((dn, f"{sk}[{idx}]", f"value {cur}!={exp}")); continue
+            o.setExpression(f"Constraints[{idx}]", expr); bound += 1
+        for obj, path, exp, expr in spec["features"]:
+            o = doc.getObject(obj)
+            if o is None or not hasattr(o, path):
+                skipped.append((dn, f"{obj}.{path}", "missing")); continue
+            cur = float(getattr(o, path))
+            if abs(cur - exp) > TOL:
+                skipped.append((dn, f"{obj}.{path}", f"value {cur}!={exp}")); continue
+            o.setExpression(path, expr); bound += 1
+        doc.recompute()
+        if spec["drop_varset"]:
+            lvs = doc.getObject("VarSet")
+            if lvs is not None and lvs.TypeId == "App::VarSet":
+                doc.removeObject("VarSet")
+                doc.recompute()
+
+    print("BOUND:", bound)
+    print("SKIPPED:", skipped if skipped else "none")
+    if skipped:
+        raise RuntimeError(f"{len(skipped)} binding(s) skipped — investigate before saving.")
+
+
+run()

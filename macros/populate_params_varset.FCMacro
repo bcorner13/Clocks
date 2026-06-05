@@ -1,0 +1,69 @@
+# populate_params_varset.FCMacro
+# Creates/updates the central Params.FCStd VarSet with all Clocks parameters.
+# Idempotent: addProperty skipped if present; values always re-asserted.
+# Values are the CURRENT literal values measured from the FCStds on 2026-06-04
+# (faithful centralization — no redesign).
+#
+# Run with Params.FCStd open (internal doc name "Params"). Saves nothing — the
+# executing session saves after verification.
+import FreeCAD as App
+
+PARAMS_PATH = "/Users/bradleycorner/Documents/3dPrinting/Commercial License/Clocks/Params.FCStd"
+
+# (name, type, group, value, unit-note)
+LENGTHS = [
+    ("FaceDiameter",            "Face",     120.0),  # disc OD (constraint = /2)
+    ("FaceThickness",           "Face",       3.0),  # rim thickness
+    ("FacePlateThickness",      "Face",       1.5),  # inner face-plate thickness
+    ("BezelWidth",              "Face",       1.5),  # radial rim width (distinct concept from plate)
+    ("MovementBoreDiameter",    "Face",       8.0),  # movement through-bore
+    ("HourMarkWidth",           "Markings",   1.0),
+    ("HourMarkLength",          "Markings",  10.0),
+    ("HourMarkRelief",          "Markings",   1.0),  # Pad height
+    ("HalfHourMarkWidth",       "Markings",   1.0),
+    ("HalfHourMarkLength",      "Markings",   5.0),
+    ("HalfHourMarkRelief",      "Markings",   0.5),  # Pad height
+    ("BracketSideLength",       "Bracket",   41.0),
+    ("BracketMountHolePitch",   "Bracket",   58.0),
+    ("BracketWallThickness",    "Bracket",    5.0),
+    ("BracketInnerSideLength",  "Bracket",   40.0),
+    ("BracketInnerInset",       "Bracket",    6.0),  # migrated from local VarSet.InsideDistance
+    ("BracketCenterHoleDiameter","Bracket",   8.0),
+    ("BracketPadHeight",        "Bracket",   22.0),
+    ("BracketLipHeight",        "Bracket",    2.0),
+]
+ANGLES = [
+    ("HalfHourMarkAngle",       "Markings",  15.0),  # degrees
+]
+INTS = [
+    ("MarkCount",               "Pattern",   12),
+]
+
+
+def run():
+    if "Params" not in [d.Name for d in App.listDocuments().values()]:
+        App.openDocument(PARAMS_PATH)
+    doc = App.getDocument("Params")
+    vs = doc.getObject("VarSet")
+    if vs is None:
+        vs = doc.addObject("App::VarSet", "VarSet"); vs.Label = "VarSet"
+
+    for name, group, val in LENGTHS:
+        if name not in vs.PropertiesList:
+            vs.addProperty("App::PropertyLength", name, group, "Clocks parameter")
+        setattr(vs, name, val)
+    for name, group, val in ANGLES:
+        if name not in vs.PropertiesList:
+            vs.addProperty("App::PropertyAngle", name, group, "Clocks parameter")
+        setattr(vs, name, val)
+    for name, group, val in INTS:
+        if name not in vs.PropertiesList:
+            vs.addProperty("App::PropertyInteger", name, group, "Clocks parameter")
+        setattr(vs, name, val)
+
+    doc.recompute()
+    print("VarSet populated:", len([p for p in vs.PropertiesList]) , "props")
+    print("params:", [n for n, _, _ in LENGTHS] + [n for n, _, _ in ANGLES] + [n for n, _, _ in INTS])
+
+
+run()

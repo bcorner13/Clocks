@@ -60,15 +60,19 @@ The "ClockFace-blank as parametric parent, lines/number XLinked from it" topolog
 
 | File | Role | Depends on | Status |
 |---|---|---|---|
-| `Params.FCStd` | VarSet — all parametric variables | — | ⚠️ empty at bootstrap; populated in Params-migration |
-| `ClockFace-blank.FCStd` | Parametric face template (disc + movement pocket) | (future) `Params.FCStd` | ⚠️ 4 unbound dims + `Sketch001` on feature face; XZ-vertical (reorient pending) — see WARNINGS.md |
-| `ClockFace-lines.FCStd` | SKU: line/tick markings (Hours ×12, HalfHour ×12) | (future) `Params.FCStd`, blank | ⚠️ 13 unbound dims + 3 feature-face sketches; XZ-vertical (reorient pending) |
-| `ClockFace-number.FCStd` | SKU: numeric markings | (future) `Params.FCStd`, blank | ⚠️ 5 unbound dims; **clean attachment (XY_Plane datum)**; already XY-flat — structural model for the others |
-| `ClockBracket.FCStd` | Shared wall mounting bracket | (future) `Params.FCStd` | ⚠️ 31 unbound dims; no feature-face attachment |
+| `Params.FCStd` | VarSet — all parametric variables (21) | — | ✅ populated; drives all four FCStds |
+| `ClockFace-blank.FCStd` | Parametric face template (disc + movement pocket) | `Params.FCStd` | ✅ Params-bound · ⚠️ `Sketch001` on feature face + XZ-vertical (reorient = Phase 3) |
+| `ClockFace-lines.FCStd` | SKU: line/tick markings (Hours ×12, HalfHour ×12) | `Params.FCStd`, blank | ✅ Params-bound · ⚠️ `Sketch001/002/004` on feature faces + XZ-vertical (reorient = Phase 3) |
+| `ClockFace-number.FCStd` | SKU: numeric markings (separate `Part::Extrusion` numerals) | `Params.FCStd`, blank | ✅ Params-bound · clean datum attachment · already XY-flat — structural model for the others |
+| `ClockBracket.FCStd` | Shared wall mounting bracket | `Params.FCStd` | ✅ Params-bound (incl. migrated local `InsideDistance`→`BracketInnerInset`); audit clean |
 
-Notes on debt: no file is ❌ BROKEN — all recompute. The ⚠️ marks unbound literals and (for
-blank/lines) feature-face attachment. `ClockFace.FCStd` (a duplicate of `-blank`) was deleted
-during the 2026-06-04 bootstrap; its `*.Session-20260604.FCStd` snapshot is the archive.
+Notes: no file is ❌ BROKEN. As of the 2026-06-04 Params migration, all dimensional literals
+are bound to central Params; the only remaining ⚠️ is the feature-face attachment in
+blank/lines (Phase 3 reorient). `ClockFace-number` builds its numerals as separate
+`Part::Extrusion`/`ShapeString` objects (an `FcClock001` group), not PartDesign pads — and its
+`Sketch001` "CenterHole" is currently *unconsumed* (drives no solid). `ClockFace.FCStd` (a
+duplicate of `-blank`) was deleted during bootstrap; its `*.Session-20260604.FCStd` snapshot is
+the archive.
 
 ---
 
@@ -99,9 +103,19 @@ This script flags:
 
 The script is authoritative. If it reports violations, fix them via a `macros/*.FCMacro` change before saving or committing — never by direct coordinate edits or FCStd XML surgery.
 
-**Documented exemption:** B-spline `Weight` constraints (Sketcher Type 18, e.g.
-`Sketch001.Constraints[0]` in the face files) are control-point weights, not user dimensions —
-**exempt** from the binding requirement. The audit flags them; treat those lines as known-OK.
+**Documented exemptions** (the corrected Clocks audit already honors these — they will not
+appear in its output):
+- B-spline `Weight` constraints (Sketcher Type **19**) — control-point weights, not dimensions.
+- `Angle` constraints at exactly 90° — perpendicularity expressed as an angle (e.g.
+  `ClockFace-lines.Sketch004`), geometric not parametric.
+- Inert feature dims — a Pad/Pocket `Length` under `UpToFirst`/`ThroughAll`, or `Length2`
+  when not `TwoLengths` — don't affect geometry, so they're not flagged.
+
+> ⚠️ The **canonical** `audit_parametric.py` (copied from the Spade project) has a WRONG
+> constraint-type table that mislabels Tangent/Perpendicular/Block as dimensions and misses
+> real Radius/Diameter. The **Clocks copy is corrected** (verified against the live Sketcher
+> API on 2026-06-04). Do not "sync" the Clocks copy back to the buggy canonical; instead
+> propagate the Clocks fix outward.
 
 ---
 
