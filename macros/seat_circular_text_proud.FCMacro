@@ -1,0 +1,72 @@
+# seat_circular_text_proud.FCMacro
+# Generalized tool (from reseat_numerals_proud): seat circular-text glyphs — the
+# Part::Extrusion objects produced by the FCCircularText macro — ON the dial face of a
+# clock-face Body, standing proud by a relief height, instead of at Z=0 / through the disc.
+#
+# Run on the ACTIVE document (open the face, run this). Works on ANY face with FCCircularText
+# extrusions. Resolves dial Z + relief from the central Params VarSet when available
+# (FacePlateThickness, NumeralReliefHeight); falls back to the constants below otherwise.
+# Binds Placement.z and Dir.z to those Params for parametric integrity, preserving each glyph's
+# XY position + rotation. Snapshots the active doc first. Idempotent. Saves nothing.
+#
+# Tunables: override DIAL_Z_FALLBACK / RELIEF_FALLBACK for non-clock geometry, or just set the
+# Params variables and re-run.
+import FreeCAD as App, time
+
+# --- config / fallbacks (used only when Params not found) ---
+DIAL_Z_FALLBACK = 1.5      # dial face height
+RELIEF_FALLBACK = 1.5      # how far proud of the dial
+PARAMS_LABEL    = "Params" # cross-doc reference label  -> <<Params>>#VarSet.<var>
+DIAL_Z_PARAM    = "FacePlateThickness"
+RELIEF_PARAM    = "NumeralReliefHeight"
+
+
+def run():
+    doc = App.ActiveDocument
+    if doc is None:
+        print("No active document — open the face first."); return
+
+    # snapshot current state
+    if doc.FileName:
+        snap = doc.FileName[:-6] + ".Session-" + time.strftime("%Y%m%d-%H%M%S") + ".FCStd"
+        doc.saveCopy(snap)
+        print("snapshot:", snap)
+
+    # resolve dial Z + relief from Params if present, else fallbacks
+    dial_z, relief, have_params = DIAL_Z_FALLBACK, RELIEF_FALLBACK, False
+    pdoc = next((d for d in App.listDocuments().values() if d.Label == PARAMS_LABEL or d.Name == PARAMS_LABEL), None)
+    if pdoc is not None:
+        vs = pdoc.getObject("VarSet")
+        if vs is not None:
+            have_params = True
+            if DIAL_Z_PARAM in vs.PropertiesList:
+                dial_z = float(getattr(vs, DIAL_Z_PARAM))
+            if RELIEF_PARAM not in vs.PropertiesList:
+                vs.addProperty("App::PropertyLength", RELIEF_PARAM, "Markings", "Text relief proud of dial")
+                setattr(vs, RELIEF_PARAM, RELIEF_FALLBACK); pdoc.recompute()
+            relief = float(getattr(vs, RELIEF_PARAM))
+
+    exs = [o for o in doc.Objects if o.TypeId == "Part::Extrusion"]
+    if not exs:
+        print("No Part::Extrusion glyphs found in", doc.Name, "— nothing to seat."); return
+
+    for e in exs:
+        e.Dir = App.Vector(e.Dir.x, e.Dir.y, relief)          # height = relief
+        pl = e.Placement
+        e.Placement = App.Placement(App.Vector(pl.Base.x, pl.Base.y, dial_z), pl.Rotation)  # seat on dial, keep XY+rot
+        if have_params:
+            try: e.setExpression("Dir.z", f"<<{PARAMS_LABEL}>>#VarSet.{RELIEF_PARAM}")
+            except Exception: pass
+            try: e.setExpression("Placement.Base.z", f"<<{PARAMS_LABEL}>>#VarSet.{DIAL_Z_PARAM}")
+            except Exception: pass
+    doc.recompute()
+
+    nz = [(round(o.Shape.BoundBox.ZMin, 2), round(o.Shape.BoundBox.ZMax, 2))
+          for o in exs if o.Shape and o.Shape.Volume > 0]
+    print(f"seated {len(exs)} text glyphs on {doc.Name}: dial Z={dial_z}, relief={relief}"
+          + ("  (Params-bound)" if have_params else "  (literal fallbacks)"))
+    print("  glyph Z range now:", min(z[0] for z in nz), "->", max(z[1] for z in nz))
+    print("  Review, then save the document manually (this macro never saves).")
+
+
+run()

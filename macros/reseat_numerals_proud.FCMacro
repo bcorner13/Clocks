@@ -1,0 +1,56 @@
+# reseat_numerals_proud.FCMacro
+# ClockFace-number: lift the 12 numeral Part::Extrusions off the back face and seat them ON the
+# dial face, standing proud by NumeralReliefHeight, so they no longer punch through the disc.
+#
+# Before: each Extrusion has Placement.z = 0 and Dir = (0,0,2) -> numerals span Z 0..2
+#         (through the 1.5mm dial plate to the back; only ~0.5mm proud of the dial at Z=1.5).
+# After:  Placement.z = FacePlateThickness (dial face, 1.5) and Dir.z = NumeralReliefHeight (1.5)
+#         -> numerals span 1.5..3.0 = proud of the dial, nothing below it.
+#
+# Parametric: Placement.z binds to <<Params>>#VarSet.FacePlateThickness, Dir.z to
+# NumeralReliefHeight. XY position + rotation of each numeral are preserved.
+# Idempotent. Snapshots the doc first. Saves nothing (session saves after screenshot approval).
+import FreeCAD as App
+
+def run():
+    doc = App.getDocument("ClockFace")  # ClockFace-number
+    # 1) snapshot current state
+    snap = "/Users/bradleycorner/Documents/3dPrinting/Commercial License/Clocks/ClockFace-number.Session-20260605.FCStd"
+    doc.saveCopy(snap)
+
+    # 2) ensure the relief-height Param exists
+    P = App.getDocument("Params") if "Params" in [d.Name for d in App.listDocuments().values()] else \
+        App.openDocument("/Users/bradleycorner/Documents/3dPrinting/Commercial License/Clocks/Params.FCStd")
+    vs = P.getObject("VarSet")
+    if "NumeralReliefHeight" not in vs.PropertiesList:
+        vs.addProperty("App::PropertyLength", "NumeralReliefHeight", "Markings", "Number relief proud of dial")
+    vs.NumeralReliefHeight = 1.5
+    P.recompute()
+
+    exs = [o for o in doc.Objects if o.TypeId == "Part::Extrusion"]
+    expr_ok, lit = 0, 0
+    for e in exs:
+        # height: Dir.z = relief height
+        e.Dir = App.Vector(e.Dir.x, e.Dir.y, 1.5)
+        try:
+            e.setExpression("Dir.z", "<<Params>>#VarSet.NumeralReliefHeight")
+            expr_ok += 1
+        except Exception:
+            lit += 1
+        # seat on dial: Placement Z = FacePlateThickness, keep XY + rotation
+        pl = e.Placement
+        e.Placement = App.Placement(App.Vector(pl.Base.x, pl.Base.y, 1.5), pl.Rotation)
+        try:
+            e.setExpression("Placement.Base.z", "<<Params>>#VarSet.FacePlateThickness")
+        except Exception:
+            pass
+    doc.recompute()
+
+    nz = [(round(o.Shape.BoundBox.ZMin, 2), round(o.Shape.BoundBox.ZMax, 2))
+          for o in exs if o.Shape and o.Shape.Volume > 0]
+    print("numerals reseated:", len(exs))
+    print("  Dir.z expr bound:", expr_ok, " literal-only:", lit)
+    print("  numeral Z range now:", min(z[0] for z in nz), "->", max(z[1] for z in nz))
+    print("  (dial face Z=1.5, rim top Z=3)")
+
+run()
