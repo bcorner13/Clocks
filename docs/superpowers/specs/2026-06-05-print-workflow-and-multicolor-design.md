@@ -100,6 +100,26 @@ re-import an updated STL and the paint is gone. Goal: eliminate that step.
     **Creality Print template**, or **stamped by a small post-export script**. (This is the piece
     worth automating — and the capability the single-body macro lacks.)
 
+**VALIDATED end-to-end (2026-06-05, Creality Print).** The FreeCAD-generated multi-object 3MF
+(`~/Downloads/ClockFace-number-PROOF.3mf`) opened in Creality Print as **13 separate objects**;
+disc → slot 1 (orange), numerals → slot 3 (red) assigned per object; renders correctly with the
+numerals **~1–2 mm proud** (raised relief, *not* engraved — earlier guess corrected). So
+FreeCAD → multi-object 3MF → per-object color is **proven**.
+
+**New requirement found in the same test — objects must be ASSEMBLED.** The 13 objects are
+independent, so moving the disc leaves the numerals behind, and overlapping objects raise a
+"too close / collisions" warning. Fix has two parts:
+1. **Fuse the 12 numerals into one accent object** → clean **2-object** plate (disc + numerals).
+2. **Mark as an assembly** so they move as one unit — in a Creality/Bambu 3MF this is the
+   `<assemble><assemble_item …>` block in `model_settings.config` (present in `Clock.3mf`).
+   FreeCAD won't write it → either a one-time "Assemble" in Creality Print, or the export-stamp
+   script writes it.
+
+**→ Stamp-script spec (now crisp):** fuse numerals → export `[disc, numerals]` as a 2-object
+3MF → stamp per-object **slot** assignments **+** an `<assemble>` block. Output opens already
+grouped *and* pre-colored — zero manual steps. (Collision warning is normal for intentional
+multi-material overlap; assembling clears it.)
+
 **Open Q2:** accent = **ticks only**, or **ticks + rim**? (Decides whether we touch the bezel.)
 **Open Q3:** confirm the target mental model is "color = separate objects, one slot each, no
 painting ever." (Working assumption: yes.)
