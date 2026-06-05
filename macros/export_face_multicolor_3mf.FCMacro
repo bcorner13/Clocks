@@ -1,0 +1,51 @@
+# export_face_multicolor_3mf.FCMacro
+# Export a clock face as a 2-OBJECT multi-color 3MF:
+#   object 1 = the PartDesign Body (disc)
+#   object 2 = all FCCircularText Part::Extrusion glyphs combined into ONE "text" object
+# Each is a separate object in the 3MF, so the slicer assigns one filament per object. World
+# positions are preserved (text stays proud on the dial). Output: <project>/3mf/<DocLabel>.3mf
+#
+# Run on the ACTIVE face document. Meshes in a throwaway doc so the face doc is never touched.
+# Does NOT write per-object slot / <assemble> metadata (FreeCAD can't) — assign slots + Assemble
+# once in the slicer, or run the stamp script later. Saves nothing in the face doc.
+import FreeCAD as App, Part, MeshPart, Mesh, os, math
+
+LINEAR_DEFLECTION = 0.01
+ANGULAR_DEFLECTION = math.radians(20)
+
+
+def run():
+    doc = App.ActiveDocument
+    if doc is None:
+        print("No active document — open the face first."); return
+    body = doc.getObject("Body")
+    if body is None or not getattr(body, "Shape", None) or body.Shape.Volume <= 0:
+        print("No solid Body found in", doc.Name); return
+    exs = [o for o in doc.Objects if o.TypeId == "Part::Extrusion" and o.Shape and o.Shape.Volume > 0]
+    if not exs:
+        print("No text extrusions found — nothing to make a 2nd colour object from."); return
+
+    disc_mesh = MeshPart.meshFromShape(Shape=body.Shape, LinearDeflection=LINEAR_DEFLECTION,
+                                       AngularDeflection=ANGULAR_DEFLECTION, Relative=False)
+    text_shape = Part.makeCompound([e.Shape for e in exs])
+    text_mesh = MeshPart.meshFromShape(Shape=text_shape, LinearDeflection=LINEAR_DEFLECTION,
+                                       AngularDeflection=ANGULAR_DEFLECTION, Relative=False)
+
+    label = doc.Label
+    exp = App.newDocument("_exp_tmp")
+    try:
+        f1 = exp.addObject("Mesh::Feature", "disc"); f1.Mesh = disc_mesh; f1.Label = label + "-disc"
+        f2 = exp.addObject("Mesh::Feature", "text"); f2.Mesh = text_mesh; f2.Label = label + "-text"
+        out_dir = os.path.join(os.path.dirname(doc.FileName), "3mf")
+        os.makedirs(out_dir, exist_ok=True)
+        out = os.path.join(out_dir, label + ".3mf")
+        Mesh.export([f1, f2], out)
+    finally:
+        App.closeDocument("_exp_tmp")
+
+    print("wrote 2-object 3MF:", out)
+    print("  disc facets:", disc_mesh.CountFacets, " text facets:", text_mesh.CountFacets,
+          " (", len(exs), "glyphs combined )")
+
+
+run()
