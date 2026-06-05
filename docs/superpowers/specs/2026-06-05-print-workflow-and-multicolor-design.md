@@ -115,10 +115,23 @@ independent, so moving the disc leaves the numerals behind, and overlapping obje
    FreeCAD won't write it → either a one-time "Assemble" in Creality Print, or the export-stamp
    script writes it.
 
-**→ Stamp-script spec (now crisp):** fuse numerals → export `[disc, numerals]` as a 2-object
-3MF → stamp per-object **slot** assignments **+** an `<assemble>` block. Output opens already
-grouped *and* pre-colored — zero manual steps. (Collision warning is normal for intentional
-multi-material overlap; assembling clears it.)
+**FULLY VALIDATED (2026-06-05) — the clean 2-object `3mf/ClockFace-number.3mf`.** Opened in
+Creality Print → it prompts **"Multi-part object detected … load as a single object with
+multiple parts?"** → **Yes**. Result: one object `ClockFace-number` with two **parts**
+(`Object_1` disc, `Object_2` text), each assigned its own filament slot, **moving together as a
+unit**, numerals proud and crisp on the dial. So the full chain works:
+`build → FCCircularText → seat_circular_text_proud → export_face_multicolor_3mf →
+Creality Print "multi-part: Yes" → assign 2 slots → slice` — no painting, no manual assemble.
+
+**Key consequence — the `<assemble>` block is NOT needed.** Creality Print's multi-part import
+does the grouping *and* per-part coloring on load. So:
+- **Workflow as-is** needs zero stamping; the only manual step is assigning the 2 slots after import.
+- **Optional stamp script** would only **pre-assign the 2 slots** (`model_settings.config`
+  `<metadata key="extruder">` per object) to remove that one step — it does **not** need to write
+  `<assemble>`. (Earlier "stamp must write `<assemble>`" is superseded.)
+
+The reusable export tool is `macros/export_face_multicolor_3mf.FCMacro`; the seat-proud tool is
+`macros/seat_circular_text_proud.FCMacro`.
 
 **Open Q2:** accent = **ticks only**, or **ticks + rim**? (Decides whether we touch the bezel.)
 **Open Q3:** confirm the target mental model is "color = separate objects, one slot each, no
