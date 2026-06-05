@@ -1,0 +1,49 @@
+# reorient_blank_to_xy.FCMacro
+# Reorients ClockFace-blank from vertical (disc in XZ, thickness Y) to XY-flat
+# (disc in XY, thickness Z), matching ClockFace-number, by re-attaching its sketches
+# to DATUM planes instead of feature faces. Re-attach only — no geometry redraw, so
+# the Params-bound constraints are preserved unchanged.
+#
+# Target recipe (from ClockFace-number):
+#   Sketch    (revolve profile): MapMode ObjectYZ on XZ_Plane
+#   Sketch001 (movement bore):   MapMode ObjectXY on XY_Plane
+# Revolution references the sketch H_Axis, so its axis follows the re-attach automatically.
+#
+# Idempotent. Run with ClockFace-blank open. Saves nothing (session saves after review).
+import FreeCAD as App
+
+def run():
+    doc = App.getDocument("ClockFace_blank")
+    sk  = doc.getObject("Sketch")
+    s1  = doc.getObject("Sketch001")
+    XZ  = doc.getObject("XZ_Plane")
+    XY  = doc.getObject("XY_Plane")
+
+    sk.AttachmentSupport = [(XZ, "")]
+    sk.MapMode = "ObjectYZ"
+    sk.MapReversed = True          # match number: bezel ridge faces +Z (disc Z 0->3)
+    sk.AttachmentOffset = App.Placement()
+
+    s1.AttachmentSupport = [(XY, "")]
+    s1.MapMode = "ObjectXY"
+    s1.AttachmentOffset = App.Placement()
+
+    # With the ridge-up flip (MapReversed) the UpToFirst movement pocket must cut the
+    # other way to reach the disc; otherwise it errors. Deterministic, not a toggle.
+    pk = doc.getObject("Pocket")
+    if pk is not None:
+        pk.Reversed = True
+
+    doc.recompute()
+
+    b = doc.getObject("Body")
+    bb = b.Shape.BoundBox
+    errs = [o.Name for o in doc.Objects if o.State and ('Error' in str(o.State) or 'Invalid' in str(o.State))]
+    print("blank reoriented:")
+    print("  bbox dx,dy,dz =", round(bb.XLength,3), round(bb.YLength,3), round(bb.ZLength,3))
+    print("  z range =", round(bb.ZMin,3), "->", round(bb.ZMax,3))
+    print("  Sketch support  =", [(s.Name, sub) for s, sub in sk.AttachmentSupport])
+    print("  Sketch001 support=", [(s.Name, sub) for s, sub in s1.AttachmentSupport])
+    print("  errors =", errs if errs else "none")
+
+run()

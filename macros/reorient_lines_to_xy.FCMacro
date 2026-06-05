@@ -1,0 +1,67 @@
+# reorient_lines_to_xy.FCMacro
+# Reorients ClockFace-lines from vertical to XY-flat (ridge up, disc Z 0->3), matching
+# ClockFace-number / ClockFace-blank, AND moves the Hours/HalfHour tick-marking sketches
+# off the Pocket.Face5 feature face onto a parametric datum plane.
+#
+# Same base reorient as reorient_blank_to_xy.FCMacro, then:
+#   - create DialFaceDatum (PartDesign::Plane on XY_Plane, Z offset = FacePlateThickness)
+#   - re-attach Sketch002 (Hours) and Sketch004 (HalfHour) to that datum (FlatFace)
+# The ticks are a 12-fold polar pattern, so the attachment's 180deg frame change is a
+# 6-step rotation that maps the pattern onto itself — verified: pattern bbox + body volume
+# unchanged. No geometry redraw; Params-bound constraints preserved.
+#
+# Idempotent. Run with ClockFace-lines open. Saves nothing.
+import FreeCAD as App
+
+def run():
+    doc = App.getDocument("ClockFace_lines")
+    sk  = doc.getObject("Sketch")
+    s1  = doc.getObject("Sketch001")
+    XZ  = doc.getObject("XZ_Plane")
+    XY  = doc.getObject("XY_Plane")
+
+    # --- base reorient (identical to blank) ---
+    sk.AttachmentSupport = [(XZ, "")]
+    sk.MapMode = "ObjectYZ"
+    sk.MapReversed = True
+    sk.AttachmentOffset = App.Placement()
+
+    s1.AttachmentSupport = [(XY, "")]
+    s1.MapMode = "ObjectXY"
+    s1.AttachmentOffset = App.Placement()
+
+    pk = doc.getObject("Pocket")
+    if pk is not None:
+        pk.Reversed = True
+    doc.recompute()
+
+    # --- dial-face datum for the markings ---
+    body = doc.getObject("Body")
+    datum = doc.getObject("DialFaceDatum")
+    if datum is None:
+        datum = body.newObject("PartDesign::Plane", "DialFaceDatum")
+    datum.AttachmentSupport = [(XY, "")]
+    datum.MapMode = "FlatFace"
+    datum.AttachmentOffset = App.Placement(App.Vector(0, 0, 1.5), App.Rotation())
+    datum.setExpression("AttachmentOffset.Base.z", "<<Params>>#VarSet.FacePlateThickness")
+    doc.recompute()
+
+    # --- move markings off the feature face onto the datum ---
+    for sn in ("Sketch002", "Sketch004"):
+        s = doc.getObject(sn)
+        s.AttachmentSupport = [(datum, "")]
+        s.MapMode = "FlatFace"
+        s.AttachmentOffset = App.Placement()
+    doc.recompute()
+
+    bb = body.Shape.BoundBox
+    errs = [o.Name for o in doc.Objects if o.State and ('Error' in str(o.State) or 'Invalid' in str(o.State))]
+    print("lines reoriented:")
+    print("  bbox dx,dy,dz =", round(bb.XLength,3), round(bb.YLength,3), round(bb.ZLength,3),
+          " z:", round(bb.ZMin,2), "->", round(bb.ZMax,2))
+    print("  volume =", round(body.Shape.Volume,2))
+    print("  Sketch002 support =", [(s.Name, sub) for s, sub in doc.getObject("Sketch002").AttachmentSupport])
+    print("  Sketch004 support =", [(s.Name, sub) for s, sub in doc.getObject("Sketch004").AttachmentSupport])
+    print("  errors =", errs if errs else "none")
+
+run()

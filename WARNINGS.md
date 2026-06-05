@@ -2,17 +2,24 @@
 
 Captured during the retroactive bootstrap (2026-06-04).
 
-## STATUS after Params migration (2026-06-04)
+## STATUS after Params migration + reorient (2026-06-04)
 
-**Params migration is complete.** Every literal dimensional constraint across the four
-FCStds is now bound to `<<Params>>#VarSet.<Var>` in the central `Params.FCStd` (21 params).
-Geometry verified unchanged (bbox + volume identical pre/post) and the central Params proven
-to drive geometry (FaceDiameter round-trip test). The bracket's pre-existing **local** VarSet
-(`InsideDistance`) was migrated into central Params and the dead local VarSet deleted.
+**Params migration complete.** Every literal dimensional constraint across the four FCStds is
+bound to `<<Params>>#VarSet.<Var>` in the central `Params.FCStd` (21 params). Geometry verified
+unchanged (bbox + volume identical pre/post); central Params proven to drive geometry
+(FaceDiameter round-trip). The bracket's pre-existing **local** VarSet (`InsideDistance`) was
+migrated into central Params and the dead local VarSet deleted.
 
-**Corrected audit now reports only 4 issues — all expected:** the feature-face DAG-risk
-attachments in `ClockFace-blank` (1) and `ClockFace-lines` (3), which **Phase 3 (reorient)**
-resolves. Bracket, number, and Params are clean.
+**Reorient complete.** `ClockFace-blank` and `ClockFace-lines` are now **XY-flat, ridge up
+(disc Z 0→3), matching `ClockFace-number`**. Base `Sketch`→`XZ_Plane`, `Sketch001`→`XY_Plane`;
+lines' Hours/HalfHour markings moved off `Pocket.Face5` onto a new `DialFaceDatum` plane whose
+Z-height is bound to `FacePlateThickness`. Re-attach was clean (pattern bbox + body volume
+unchanged — no recreate fallback needed). The base flip used `Sketch.MapReversed=True` +
+`Pocket.Reversed=True` to put the bezel ridge on +Z.
+
+**✓ Corrected audit now passes on all five files.** No unbound dimensions, no feature-face DAG
+risk. Remaining follow-on (not debt): **XLink wiring** (lines/number → blank) and the
+**deferred STL/3MF re-export** of blank & lines in the new orientation.
 
 > ⚠️ **Canonical `audit_parametric.py` bug (affects ALL projects).** The copied-from-Spade
 > audit shipped a WRONG Sketcher constraint-type table — it labeled Tangent(5) as

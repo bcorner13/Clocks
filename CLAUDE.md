@@ -61,14 +61,18 @@ The "ClockFace-blank as parametric parent, lines/number XLinked from it" topolog
 | File | Role | Depends on | Status |
 |---|---|---|---|
 | `Params.FCStd` | VarSet — all parametric variables (21) | — | ✅ populated; drives all four FCStds |
-| `ClockFace-blank.FCStd` | Parametric face template (disc + movement pocket) | `Params.FCStd` | ✅ Params-bound · ⚠️ `Sketch001` on feature face + XZ-vertical (reorient = Phase 3) |
-| `ClockFace-lines.FCStd` | SKU: line/tick markings (Hours ×12, HalfHour ×12) | `Params.FCStd`, blank | ✅ Params-bound · ⚠️ `Sketch001/002/004` on feature faces + XZ-vertical (reorient = Phase 3) |
-| `ClockFace-number.FCStd` | SKU: numeric markings (separate `Part::Extrusion` numerals) | `Params.FCStd`, blank | ✅ Params-bound · clean datum attachment · already XY-flat — structural model for the others |
+| `ClockFace-blank.FCStd` | Parametric face template (disc + movement pocket) | `Params.FCStd` | ✅ Params-bound · datum-attached · **XY-flat, ridge up (Z 0→3)** |
+| `ClockFace-lines.FCStd` | SKU: line/tick markings (Hours ×12, HalfHour ×12) | `Params.FCStd`, blank | ✅ Params-bound · datum-attached (markings on `DialFaceDatum`) · **XY-flat, ridge up** |
+| `ClockFace-number.FCStd` | SKU: numeric markings (separate `Part::Extrusion` numerals) | `Params.FCStd`, blank | ✅ Params-bound · clean datum attachment · XY-flat — structural model for the others |
 | `ClockBracket.FCStd` | Shared wall mounting bracket | `Params.FCStd` | ✅ Params-bound (incl. migrated local `InsideDistance`→`BracketInnerInset`); audit clean |
 
-Notes: no file is ❌ BROKEN. As of the 2026-06-04 Params migration, all dimensional literals
-are bound to central Params; the only remaining ⚠️ is the feature-face attachment in
-blank/lines (Phase 3 reorient). `ClockFace-number` builds its numerals as separate
+Notes: no file is ❌ BROKEN. As of 2026-06-04, all dimensional literals are bound to central
+Params, and blank & lines have been reoriented XY-flat (ridge up) with all sketches on datum
+planes — **the full project passes `audit_parametric.py`**. The reorient used
+`Sketch.MapReversed=True` + `Pocket.Reversed=True` for the ridge-up flip; lines' markings live
+on a `DialFaceDatum` whose Z-height binds to `FacePlateThickness`. Remaining follow-on (not
+debt): XLink wiring (lines/number → blank) and STL/3MF re-export of blank & lines.
+`ClockFace-number` builds its numerals as separate
 `Part::Extrusion`/`ShapeString` objects (an `FcClock001` group), not PartDesign pads — and its
 `Sketch001` "CenterHole" is currently *unconsumed* (drives no solid). `ClockFace.FCStd` (a
 duplicate of `-blank`) was deleted during bootstrap; its `*.Session-20260604.FCStd` snapshot is
@@ -144,7 +148,8 @@ the Spade Connector coordinate-edit saga in the global memory motivates rules #1
   about how blank/lines *should* be built, copy number's pattern.
 - Two reorient macros — `macros/reorient_blank_to_xy.FCMacro` and
   `macros/reorient_lines_to_xy.FCMacro` — supersede the bootstrap spec's single stub
-  `reorient_blank_lines_to_xy.FCMacro`. Do not derive new SKUs from blank until the reorient runs.
+  `reorient_blank_lines_to_xy.FCMacro`. **The reorient has run** (2026-06-04): blank & lines
+  are XY-flat, ridge up. Ridge-up requires `Sketch.MapReversed=True` and `Pocket.Reversed=True`.
 - STL/3MF re-export is deferred until after the reorient is reviewed — existing exports in
   `stl/`/`3mf/` reflect the pre-reorient geometry.
 
