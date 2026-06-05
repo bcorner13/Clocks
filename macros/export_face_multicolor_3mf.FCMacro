@@ -56,30 +56,40 @@ def run():
     if body is None or not getattr(body, "Shape", None) or body.Shape.Volume <= 0:
         print("No solid Body found in", doc.Name); return
     exs = [o for o in doc.Objects if o.TypeId == "Part::Extrusion" and o.Shape and o.Shape.Volume > 0]
-    if not exs:
-        print("No text extrusions found — nothing to make a 2nd colour object from."); return
 
     label = doc.Label
     parts = []   # (suffix, mesh)
 
+    bb = body.Shape.BoundBox
+    cx, cy = bb.Center.x, bb.Center.y   # disc XY centre — do NOT assume origin
+
+    did_split = False
     if SPLIT_BEZEL:
         r = _bezel_cut_radius()
         zc = _param(DIAL_FACE_Z_PARAM, DIAL_FACE_Z_FALLBACK)   # dial face height
-        bb = body.Shape.BoundBox
         cyl = Part.makeCylinder(r, (bb.ZLength + 20),
-                                App.Vector(0, 0, bb.ZMin - 10), App.Vector(0, 0, 1))
+                                App.Vector(cx, cy, bb.ZMin - 10), App.Vector(0, 0, 1))
         outer = body.Shape.cut(cyl)                            # outer ring, full height
         box_above = Part.makeBox(bb.XLength + 50, bb.YLength + 50, (bb.ZMax - zc) + 20,
                                  App.Vector(bb.XMin - 25, bb.YMin - 25, zc))
         bezel = outer.common(box_above)                        # outer ring ABOVE dial face = proud lip
-        base = body.Shape.cut(bezel)                           # flat base + dial (everything else)
-        parts.append(("base",  _mesh(base)))
-        parts.append(("bezel", _mesh(bezel)))
-        print(f"  bezel = proud lip (r>{r}, Z>{zc}) -> base vol {round(base.Volume,1)}, bezel vol {round(bezel.Volume,1)}")
-    else:
+        # only split if a real bezel lip exists on this face (virgin faces may have none)
+        if bezel.Volume > 1e-3:
+            base = body.Shape.cut(bezel)
+            parts.append(("base",  _mesh(base)))
+            parts.append(("bezel", _mesh(bezel)))
+            did_split = True
+            print(f"  bezel = proud lip (r>{round(r,3)}, Z>{zc}) -> base vol {round(base.Volume,1)}, bezel vol {round(bezel.Volume,1)}")
+        else:
+            print(f"  no bezel lip above Z={zc} at r>{round(r,3)} — exporting disc whole")
+    if not did_split:
         parts.append(("disc", _mesh(body.Shape)))
 
-    parts.append(("text", _mesh(Part.makeCompound([e.Shape for e in exs]))))
+    # text is optional — a face may have no FCCircularText glyphs yet
+    if exs:
+        parts.append(("text", _mesh(Part.makeCompound([e.Shape for e in exs]))))
+    else:
+        print("  (no text extrusions — exporting body parts only)")
 
     exp = App.newDocument("_exp_tmp")
     try:
@@ -96,7 +106,7 @@ def run():
 
     print(f"wrote {len(parts)}-object 3MF:", out)
     print("  objects:", ", ".join(s for s, _ in parts),
-          " | text glyphs combined:", len(exs))
+          ("| text glyphs combined: " + str(len(exs))) if exs else "")
 
 
 run()
