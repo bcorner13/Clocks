@@ -15,12 +15,13 @@ and a parametric face template with interchangeable face SKUs.
 
 ## Status (2026-06-04)
 
-Retroactively bootstrapped to `PROJECT_BOOTSTRAP.md`. Geometry is in progress; `number` is
-furthest along (exported STL/3MF). Known parametric debt and the orientation inconsistency
-are tracked in [`WARNINGS.md`](WARNINGS.md).
+Retroactively bootstrapped to `PROJECT_BOOTSTRAP.md`. Bootstrap, central-Params migration, and
+the blank/lines XY-flat reorient are **done**; the full project passes `audit_parametric.py`.
+Architecture decisions and accepted tradeoffs are tracked in [`WARNINGS.md`](WARNINGS.md).
 
-**Roadmap:** Params migration → reorient blank & lines to XY-flat → XLink wiring → first PLA
-test print (print profile TBD).
+**Architecture:** central `Params.FCStd` drives all dimensions; geometry XLinks were evaluated
+and **declined** (YAGNI — Params already syncs dimensions). **Remaining:** first PLA test print
+(print profile TBD).
 
 ## Layout
 

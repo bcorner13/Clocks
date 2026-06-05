@@ -1,11 +1,16 @@
 # Project rules — Clocks
 
-Every FCStd in this project is currently **independent** — no XLinks, no shared Params. Two
-consequences flow from that: (a) common dimensions (FaceDiameter, FaceThickness, …) are
-duplicated across blank/lines/number/bracket, and changing one will silently desync the
-others; (b) the immediate parametric debt is literal numbers in sketches plus marking/pocket
-sketches anchored to **feature faces**. Migrate to Params *before* wiring up XLinks — wiring
-first only propagates the debt. Read the full rules below before any geometry change.
+**Architecture (settled 2026-06-05): central Params, no geometry XLinks.** Every FCStd draws
+its dimensions from the shared `Params.FCStd` VarSet (`<<Params>>#VarSet.Var`), so changing a
+common dimension (FaceDiameter, FaceThickness, …) updates blank/lines/number/bracket together.
+The base disc geometry is **intentionally duplicated** across the face SKUs rather than
+cross-document XLinked — geometry-XLinking was evaluated and **declined** (YAGNI): Params
+already gives dimension sync, and cross-doc binders add topological-naming fragility (see
+[[feedback_freecad_rename_breaks_xlink]]) for a benefit (base-disc *topology* inheritance) this
+product line rarely needs. **Consequence to accept:** a *structural* change to the base disc
+profile (not a dimension — e.g. adding a bezel bevel) must be replicated by hand in each face
+SKU. If that ever becomes frequent, revisit XLinking then. Read the full rules below before any
+geometry change.
 
 ---
 
