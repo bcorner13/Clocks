@@ -1,17 +1,46 @@
 # export_face_multicolor_3mf.FCMacro
-# Export a clock face as a 2-OBJECT multi-color 3MF:
-#   object 1 = the PartDesign Body (disc)
-#   object 2 = all FCCircularText Part::Extrusion glyphs combined into ONE "text" object
-# Each is a separate object in the 3MF, so the slicer assigns one filament per object. World
-# positions are preserved (text stays proud on the dial). Output: <project>/3mf/<DocLabel>.3mf
+# Export a clock face as a multi-object multi-color 3MF. Each object -> one filament slot in the
+# slicer (Creality Print "load as multi-part object: Yes" groups them + colors per part).
+#
+#   SPLIT_BEZEL = False -> 2 objects: [disc] + [text]
+#   SPLIT_BEZEL = True  -> 3 objects: [dial] + [bezel ring] + [text]
+#       The disc is split at radius (FaceDiameter/2 - BezelWidth) into the inner dial and the
+#       outer bezel ring, so the bezel can be its own colour WITHOUT hand-painting in the slicer.
+#
+# "text" = all FCCircularText Part::Extrusion glyphs combined into ONE object. World positions
+# preserved (text stays proud on the dial). Output: <project>/3mf/<DocLabel>.3mf
 #
 # Run on the ACTIVE face document. Meshes in a throwaway doc so the face doc is never touched.
-# Does NOT write per-object slot / <assemble> metadata (FreeCAD can't) — assign slots + Assemble
-# once in the slicer, or run the stamp script later. Saves nothing in the face doc.
+# Does NOT write per-object slot metadata (FreeCAD can't) — assign slots once after import.
 import FreeCAD as App, Part, MeshPart, Mesh, os, math
 
 LINEAR_DEFLECTION = 0.01
 ANGULAR_DEFLECTION = math.radians(20)
+SPLIT_BEZEL = True
+
+# bezel-split geometry, resolved from Params when available
+FACE_DIAMETER_PARAM = "FaceDiameter"
+BEZEL_WIDTH_PARAM   = "BezelWidth"
+FACE_DIAMETER_FALLBACK = 120.0
+BEZEL_WIDTH_FALLBACK   = 1.5
+PARAMS_LABEL = "Params"
+
+
+def _mesh(shape):
+    return MeshPart.meshFromShape(Shape=shape, LinearDeflection=LINEAR_DEFLECTION,
+                                  AngularDeflection=ANGULAR_DEFLECTION, Relative=False)
+
+
+def _bezel_cut_radius():
+    fd, bw = FACE_DIAMETER_FALLBACK, BEZEL_WIDTH_FALLBACK
+    pdoc = next((d for d in App.listDocuments().values()
+                 if d.Label == PARAMS_LABEL or d.Name == PARAMS_LABEL), None)
+    if pdoc is not None:
+        vs = pdoc.getObject("VarSet")
+        if vs is not None:
+            if FACE_DIAMETER_PARAM in vs.PropertiesList: fd = float(getattr(vs, FACE_DIAMETER_PARAM))
+            if BEZEL_WIDTH_PARAM in vs.PropertiesList:   bw = float(getattr(vs, BEZEL_WIDTH_PARAM))
+    return fd / 2.0 - bw
 
 
 def run():
@@ -25,27 +54,40 @@ def run():
     if not exs:
         print("No text extrusions found — nothing to make a 2nd colour object from."); return
 
-    disc_mesh = MeshPart.meshFromShape(Shape=body.Shape, LinearDeflection=LINEAR_DEFLECTION,
-                                       AngularDeflection=ANGULAR_DEFLECTION, Relative=False)
-    text_shape = Part.makeCompound([e.Shape for e in exs])
-    text_mesh = MeshPart.meshFromShape(Shape=text_shape, LinearDeflection=LINEAR_DEFLECTION,
-                                       AngularDeflection=ANGULAR_DEFLECTION, Relative=False)
-
     label = doc.Label
+    parts = []   # (suffix, mesh)
+
+    if SPLIT_BEZEL:
+        r = _bezel_cut_radius()
+        bb = body.Shape.BoundBox
+        cyl = Part.makeCylinder(r, (bb.ZLength + 20),
+                                App.Vector(0, 0, bb.ZMin - 10), App.Vector(0, 0, 1))
+        dial = body.Shape.common(cyl)
+        bezel = body.Shape.cut(cyl)
+        parts.append(("dial",  _mesh(dial)))
+        parts.append(("bezel", _mesh(bezel)))
+        print(f"  bezel split at r={r} -> dial vol {round(dial.Volume,1)}, bezel vol {round(bezel.Volume,1)}")
+    else:
+        parts.append(("disc", _mesh(body.Shape)))
+
+    parts.append(("text", _mesh(Part.makeCompound([e.Shape for e in exs]))))
+
     exp = App.newDocument("_exp_tmp")
     try:
-        f1 = exp.addObject("Mesh::Feature", "disc"); f1.Mesh = disc_mesh; f1.Label = label + "-disc"
-        f2 = exp.addObject("Mesh::Feature", "text"); f2.Mesh = text_mesh; f2.Label = label + "-text"
+        feats = []
+        for suffix, m in parts:
+            f = exp.addObject("Mesh::Feature", suffix); f.Mesh = m; f.Label = label + "-" + suffix
+            feats.append(f)
         out_dir = os.path.join(os.path.dirname(doc.FileName), "3mf")
         os.makedirs(out_dir, exist_ok=True)
         out = os.path.join(out_dir, label + ".3mf")
-        Mesh.export([f1, f2], out)
+        Mesh.export(feats, out)
     finally:
         App.closeDocument("_exp_tmp")
 
-    print("wrote 2-object 3MF:", out)
-    print("  disc facets:", disc_mesh.CountFacets, " text facets:", text_mesh.CountFacets,
-          " (", len(exs), "glyphs combined )")
+    print(f"wrote {len(parts)}-object 3MF:", out)
+    print("  objects:", ", ".join(s for s, _ in parts),
+          " | text glyphs combined:", len(exs))
 
 
 run()
