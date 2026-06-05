@@ -85,11 +85,20 @@ re-import an updated STL and the paint is gone. Goal: eliminate that step.
   object (e.g. a separate body, or isolate the pad volumes). Real work, more than number.
 - **The bezel rim** (on both face SKUs) is part of the disc revolve; making *it* a separate
   color would need its own split. (Open Q2 decides whether we go there.)
-- **Export:** FreeCAD alone won't write Creality's per-object slot metadata
-  (`model_settings.config` `<metadata key="extruder">`). So the export step needs either a
-  **one-time Creality Print template** reused per print, or a **small post-export script** that
-  stamps slot assignments onto a multi-object 3MF. (This is the piece worth automating — and
-  the same capability the macro lacks.)
+- **Export — VERIFIED 2026-06-05 on `ClockFace-number`:**
+  - The **GUI File→Export** path rejects loose Part objects / groups ("no body selected") — this
+    is a GUI-command guard, *not* a FreeCAD limit.
+  - **Scripting `Mesh.export()` exports anything with a shape** — tested OK on the Body, a single
+    numeral `Part::Extrusion`, the `FcClock001` group, and Body+all-numerals.
+  - **It keeps objects SEPARATE in 3MF (does not merge):** `Mesh.export([Body]+12 numerals,
+    .3mf)` → a 3MF with **13 objects / 13 meshes / 13 build-items**. (STL, by contrast, merges
+    everything into one mesh.) So a **multi-object 3MF straight from FreeCAD scripting is the
+    mechanism** — fuse the 12 numerals into one accent object → export `[disc, numerals]` → clean
+    2-object 3MF.
+  - The **only** thing FreeCAD won't write is Creality's per-object **slot** metadata
+    (`model_settings.config` `<metadata key="extruder">`). So slot mapping is set once in a
+    **Creality Print template**, or **stamped by a small post-export script**. (This is the piece
+    worth automating — and the capability the single-body macro lacks.)
 
 **Open Q2:** accent = **ticks only**, or **ticks + rim**? (Decides whether we touch the bezel.)
 **Open Q3:** confirm the target mental model is "color = separate objects, one slot each, no
