@@ -74,11 +74,18 @@ re-import an updated STL and the paint is gone. Goal: eliminate that step.
   2. *is* the multi-color assembly plate,
   3. is exactly the multi-body export the stock macro can't do (§4).
 
-**Cost / requirements:**
-- FreeCAD: accent regions must become **separate bodies/objects**. Tick marks are already their
-  own features (easy); the **bezel rim is part of the disc** and would need a split if it's to
-  be a separate color.
-- Export: FreeCAD alone won't write Creality's per-object slot metadata
+**Cost / requirements — and the two SKUs sit at opposite ends:**
+- **`number` is already structured right.** Its 12 numerals are **separate `Part::Extrusion`
+  objects**, not fused into the Body. That's exactly the per-object color structure we want:
+  include them in the export and assign disc→base / numerals→accent. (The only reason
+  `ClockFace-number.3mf` looked broken is a Body-only export dropped them — §5b.)
+- **`lines` is the one needing surgery.** Its tick markings are **PartDesign Pads/PolarPatterns
+  fused into the single Body** — that's *why* it exported cleanly as one solid, but it means a
+  second color requires **un-fusing / splitting the tick volumes back out** into their own
+  object (e.g. a separate body, or isolate the pad volumes). Real work, more than number.
+- **The bezel rim** (on both face SKUs) is part of the disc revolve; making *it* a separate
+  color would need its own split. (Open Q2 decides whether we go there.)
+- **Export:** FreeCAD alone won't write Creality's per-object slot metadata
   (`model_settings.config` `<metadata key="extruder">`). So the export step needs either a
   **one-time Creality Print template** reused per print, or a **small post-export script** that
   stamps slot assignments onto a multi-object 3MF. (This is the piece worth automating — and
@@ -123,17 +130,23 @@ changes**, mesh has no segmentation. It also still holds the **old vertical** li
 The good two-color result lives only in an **unsaved Creality Print session**. Action: re-save/
 export the good project from Creality Print over the stale file before reusing it as a template.
 
-### 5b. `ClockFace-number.3mf` is missing the numerals — number SKU is unfinished
-- The committed `ClockFace-number.3mf` is a **Body-only** geometry export (single bare object,
-  ~1440 verts) → numerals excluded.
-- In the FCStd the **12 numerals are separate `Part::Extrusion` objects** (group `FcClock001`),
-  **not fused into the PartDesign Body**, sitting at **Z 0–2 embedded inside the disc (Z 0–3)**.
-  So even exported together they're **buried** — they only read as a **multi-color inlay** (e.g.
-  printed face-down, numerals visible on the bottom/front face).
-- `Sketch001` "CenterHole" (Ø8) is still **unconsumed** — no movement bore in number.
-- **Conclusion:** the number SKU only works *as a multi-color part*. "Fixing the missing
-  numbers" = doing the §3 multi-color design for number (numerals as their own color object,
-  correctly surfaced), plus consuming the center bore. Not a quick export tweak.
+### 5b. `ClockFace-number.3mf` is missing the numerals — they're not in the Body
+- The numerals **are correct, visible geometry** on the dial face (confirmed in the FreeCAD
+  view). Earlier "buried" call was **wrong** — corrected here.
+- They are **12 separate `Part::Extrusion` objects** (group `FcClock001` + `Comp_Arabic001`/
+  `Shape001`), **not part of the PartDesign `Body`**. The committed `ClockFace-number.3mf` is a
+  **Body-only export** (single bare object, ~1440 verts), so it omits them → "numbers missing."
+- Number's center **bore is now consumed** (`Body` tip = `Pocket`, UpToFirst, Reversed) — so the
+  earlier "unconsumed bore" note is outdated.
+- **Fix:**
+  - *Single-color:* export `Body` **+ the numeral objects** together (not Body-only) and the
+    numbers come through.
+  - *Multi-color (preferred):* the numerals being a **separate object** is exactly what §3 wants
+    — assign disc→base slot, numerals→accent slot. So **number is already well-structured for
+    multi-color**, it just needs the export to (a) include the numerals and (b) ideally collapse
+    the 12 extrusions into one "numerals" object with the accent slot baked in.
+- So this is **not** a quick "the SKU is broken" — the geometry is fine; it's the same
+  per-object multi-color export need as the line face (§3).
 
 ---
 
@@ -153,7 +166,9 @@ export the good project from Creality Print over the stale file before reusing i
 1. Rescue assets: re-save good `Clock.3mf` from Creality Print; export + back up the Holo
    profile into `Profiles/`.
 2. Confirm the color split (Q2/Q3) and the deliverable/standards scope (Q4).
-3. Modeling: split line-face into body/accent objects (and number into body/numeral objects;
-   consume number's bore).
+3. Modeling: **number** is mostly there (numerals already separate, bore already consumed) —
+   just collapse the 12 numeral extrusions into one accent object and include it in the export.
+   **lines** needs the real work — un-fuse the tick volumes from the Body into a separate accent
+   object.
 4. Export automation: decide Q6, implement multi-object 3MF with per-object slots.
 5. Document the per-project workflow; regenerate the clean deliverables.
