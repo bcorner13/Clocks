@@ -3,9 +3,10 @@
 # slicer (Creality Print "load as multi-part object: Yes" groups them + colors per part).
 #
 #   SPLIT_BEZEL = False -> 2 objects: [disc] + [text]
-#   SPLIT_BEZEL = True  -> 3 objects: [dial] + [bezel ring] + [text]
-#       The disc is split at radius (FaceDiameter/2 - BezelWidth) into the inner dial and the
-#       outer bezel ring, so the bezel can be its own colour WITHOUT hand-painting in the slicer.
+#   SPLIT_BEZEL = True  -> 3 objects: [base] + [bezel lip] + [text]
+#       The bezel object is ONLY the proud rim lip: the outer ring (r > FaceDiameter/2 - BezelWidth)
+#       AND above the dial face (Z > FacePlateThickness). Everything else (the flat base plate +
+#       dial) stays the base colour. So the bezel is its own colour WITHOUT hand-painting.
 #
 # "text" = all FCCircularText Part::Extrusion glyphs combined into ONE object. World positions
 # preserved (text stays proud on the dial). Output: <project>/3mf/<DocLabel>.3mf
@@ -21,8 +22,10 @@ SPLIT_BEZEL = True
 # bezel-split geometry, resolved from Params when available
 FACE_DIAMETER_PARAM = "FaceDiameter"
 BEZEL_WIDTH_PARAM   = "BezelWidth"
+DIAL_FACE_Z_PARAM   = "FacePlateThickness"
 FACE_DIAMETER_FALLBACK = 120.0
 BEZEL_WIDTH_FALLBACK   = 1.5
+DIAL_FACE_Z_FALLBACK   = 1.5
 PARAMS_LABEL = "Params"
 
 
@@ -31,16 +34,18 @@ def _mesh(shape):
                                   AngularDeflection=ANGULAR_DEFLECTION, Relative=False)
 
 
-def _bezel_cut_radius():
-    fd, bw = FACE_DIAMETER_FALLBACK, BEZEL_WIDTH_FALLBACK
+def _param(name, fallback):
     pdoc = next((d for d in App.listDocuments().values()
                  if d.Label == PARAMS_LABEL or d.Name == PARAMS_LABEL), None)
     if pdoc is not None:
         vs = pdoc.getObject("VarSet")
-        if vs is not None:
-            if FACE_DIAMETER_PARAM in vs.PropertiesList: fd = float(getattr(vs, FACE_DIAMETER_PARAM))
-            if BEZEL_WIDTH_PARAM in vs.PropertiesList:   bw = float(getattr(vs, BEZEL_WIDTH_PARAM))
-    return fd / 2.0 - bw
+        if vs is not None and name in vs.PropertiesList:
+            return float(getattr(vs, name))
+    return fallback
+
+
+def _bezel_cut_radius():
+    return _param(FACE_DIAMETER_PARAM, FACE_DIAMETER_FALLBACK) / 2.0 - _param(BEZEL_WIDTH_PARAM, BEZEL_WIDTH_FALLBACK)
 
 
 def run():
@@ -59,14 +64,18 @@ def run():
 
     if SPLIT_BEZEL:
         r = _bezel_cut_radius()
+        zc = _param(DIAL_FACE_Z_PARAM, DIAL_FACE_Z_FALLBACK)   # dial face height
         bb = body.Shape.BoundBox
         cyl = Part.makeCylinder(r, (bb.ZLength + 20),
                                 App.Vector(0, 0, bb.ZMin - 10), App.Vector(0, 0, 1))
-        dial = body.Shape.common(cyl)
-        bezel = body.Shape.cut(cyl)
-        parts.append(("dial",  _mesh(dial)))
+        outer = body.Shape.cut(cyl)                            # outer ring, full height
+        box_above = Part.makeBox(bb.XLength + 50, bb.YLength + 50, (bb.ZMax - zc) + 20,
+                                 App.Vector(bb.XMin - 25, bb.YMin - 25, zc))
+        bezel = outer.common(box_above)                        # outer ring ABOVE dial face = proud lip
+        base = body.Shape.cut(bezel)                           # flat base + dial (everything else)
+        parts.append(("base",  _mesh(base)))
         parts.append(("bezel", _mesh(bezel)))
-        print(f"  bezel split at r={r} -> dial vol {round(dial.Volume,1)}, bezel vol {round(bezel.Volume,1)}")
+        print(f"  bezel = proud lip (r>{r}, Z>{zc}) -> base vol {round(base.Volume,1)}, bezel vol {round(bezel.Volume,1)}")
     else:
         parts.append(("disc", _mesh(body.Shape)))
 
