@@ -214,3 +214,41 @@ export the good project from Creality Print over the stale file before reusing i
    object.
 4. Export automation: decide Q6, implement multi-object 3MF with per-object slots.
 5. Document the per-project workflow; regenerate the clean deliverables.
+
+---
+
+## 8. PAUSED (2026-06-06) — baking print settings into the export
+
+Status as of pause: number + roman faces print well via the 3-object (base/bezel/text) export +
+Creality "multi-part: Yes" + manual 3-slot assignment. The remaining want: the exported `.3mf`
+should carry the **print settings** (global `project_settings.config` + object/part
+`model_settings.config`) so it opens ready — same idea as the 2cv001 macro's "reference a base 3MF".
+
+How 2cv001 does it: a `.3mf` is a zip; it opens the referenced base, overwrites **only** the
+geometry `.model`, copies every other file (settings) through, rewrites the zip. Simple — but it
+swaps a **single** mesh (single-body macro).
+
+The open decision — which base, which approach:
+
+- **Option A (recommended): save a 3-PART base.** In Creality, save the working Roman/number plate
+  (3 parts already assigned to slots) as `Profiles/ClockFace.base.3mf`. It then has the settings
+  AND the exact 3-part/slot/assemble structure. The injector becomes the literal 2cv001 trick,
+  just **3 meshes swapped in** (matched by order: base, bezel, text). Low risk, no format guessing.
+- **Option B: use `Clock.3mf` as base.** It carries the settings but is a **2-object** plate
+  (lines + bracket, `<assemble>` of separate objects). Reusing it means hand-rebuilding Creality's
+  full 3-part project format (root `3dmodel.model` → external `3D/Objects/object_N.model` →
+  `model_settings.config` parts/extruders/assemble, rels, UUIDs, Content_Types). Deterministic but
+  fragile; needs several open-test-fix cycles in Creality.
+
+Creality 3MF structure (verified from Clock.3mf, for whoever builds this): root `3D/3dmodel.model`
+holds `<object>`s whose `<components>` reference external `/3D/Objects/object_N.model` mesh files;
+`<build><item>` places each with a transform; `Metadata/model_settings.config` defines objects/
+parts + `<metadata key="extruder">` (slot) + `<assemble>`; `Metadata/project_settings.config` is
+the global profile (this plate: 0.12 layer, 2 walls, 15% infill, Textured PEI). Namespaces:
+microsoft 3dmanufacturing core + BambuStudio + production `p`.
+
+Slot assignment is per-colorway (user choice) — the injector should take 3 slot numbers (config),
+defaulting to something sane, leaving final tweak to the slicer.
+
+**Next action when resumed:** pick Option A or B. If A, user saves `ClockFace.base.3mf`; then build
+the 3-mesh swap injector (extend `export_face_multicolor_3mf` with a BASE_3MF option).
