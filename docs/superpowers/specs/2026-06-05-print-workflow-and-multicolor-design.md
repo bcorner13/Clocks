@@ -252,3 +252,35 @@ defaulting to something sane, leaving final tweak to the slicer.
 
 **Next action when resumed:** pick Option A or B. If A, user saves `ClockFace.base.3mf`; then build
 the 3-mesh swap injector (extend `export_face_multicolor_3mf` with a BASE_3MF option).
+
+---
+
+## 9. PAUSED again (2026-06-14) — settings injection, decision still open
+
+Base was saved (`Profiles/ClockFace.base.3mf`). Inspecting it changed the plan:
+
+- The saved base is a **full Creality project**: one face-object with **3 parts** (dial/bezel/text)
+  **plus the bracket**. Creality **re-centers each part to its own bbox center** and bakes per-part
+  transforms — the **text part carries a geometry-specific X offset**. So a naive "swap the meshes"
+  (2cv001-style) does NOT reposition a *different* face's text correctly; the transforms are tied to
+  the Roman geometry.
+- Note: Creality's save **overwrote** the bare world-coord `3mf/ClockFace-roman.3mf` with the project
+  (both it and the base are now the same 96 KB project file).
+
+**Three paths (UNDECIDED — user to choose on resume):**
+- **A — Process preset (simplest, recommended).** Save the tuned settings once in Creality as a
+  named **Process preset** (not a project). Select it for any face. No injection, no file work; only
+  the 3-slot pick stays manual. Gets ~90% of the value for ~30s setup.
+- **B — Stamp only the profile.** Bake `project_settings.config` onto a world-coord export; opens
+  profile-loaded, still needs "multi-part: Yes" + 3 slots. No transform math.
+- **C — Full injection (turnkey file).** Transform-aware injector recomputes each part's placement
+  for new meshes → opens fully loaded + pre-colored. Most convenient, but multi-iteration build with
+  format risk; needs Creality load-tests (can't self-verify).
+
+**Resume here:** pick A / B / C. (If C, the injector must recompute per-part transforms, not just
+swap meshes — that's the crux.)
+
+## State at pause (2026-06-14)
+New, uncommitted-until-this-save work present: `ClockFace-roman`, `ClockFace-NumberStyle_2`,
+`Clock_backing`, `ClockAssembly` FCStds + their 3MFs; `Profiles/ClockFace.base.3mf`; an exported
+Creality printer profile zip. Origin-stub STLs (`*--*-axis.stl`, `*--*-plane.stl`) are gitignored.

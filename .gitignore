@@ -5,3 +5,6 @@ gcode/
 .DS_Store
 *.old.*
 archive/
+*--*-axis.stl
+*--*-plane.stl
+*--Origin*.stl
